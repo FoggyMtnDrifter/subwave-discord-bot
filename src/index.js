@@ -10,11 +10,8 @@ import { createLogger } from './utils/logger.js';
 // Import commands
 import * as play from './commands/play.js';
 import * as stop from './commands/stop.js';
-import * as nowplaying from './commands/nowplaying.js';
 import * as request from './commands/request.js';
 import * as search from './commands/search.js';
-import * as stats from './commands/stats.js';
-import * as queue from './commands/queue.js';
 
 // Import events
 import * as ready from './events/ready.js';
@@ -48,7 +45,7 @@ const client = new Client({
 
 // Setup commands registry
 client.commands = new Collection();
-const commandList = [play, stop, nowplaying, request, search, stats, queue];
+const commandList = [play, stop, request, search];
 
 for (const cmd of commandList) {
   if (cmd.data?.name) {

@@ -76,11 +76,8 @@ npm run dev
 |---|---|
 | `/play` | Join your current voice channel and start streaming the radio |
 | `/stop` | Leave the voice channel and stop streaming |
-| `/nowplaying` | Show what's currently on air with a sleek auto-updating card |
 | `/request` | Open a text form to submit a song request directly to the AI DJ |
 | `/search <query>` | Search the station's library and request a specific track |
-| `/stats` | View station health, listener count, and current show |
-| `/queue` | Display the upcoming track queue |
 
 ---
 

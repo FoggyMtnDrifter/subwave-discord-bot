@@ -15,11 +15,8 @@ import { createLogger } from './utils/logger.js';
 // Import command definitions
 import * as play from './commands/play.js';
 import * as stop from './commands/stop.js';
-import * as nowplaying from './commands/nowplaying.js';
 import * as request from './commands/request.js';
 import * as search from './commands/search.js';
-import * as stats from './commands/stats.js';
-import * as queue from './commands/queue.js';
 
 const logger = createLogger('deploy-commands');
 
@@ -35,11 +32,8 @@ if (!token || !clientId) {
 const commands = [
   play.data.toJSON(),
   stop.data.toJSON(),
-  nowplaying.data.toJSON(),
   request.data.toJSON(),
   search.data.toJSON(),
-  stats.data.toJSON(),
-  queue.data.toJSON(),
 ];
 
 const rest = new REST({ version: '10' }).setToken(token);
