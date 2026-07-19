@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: subwave-discord-bot
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - CLIENT_ID=${CLIENT_ID}
+      - GUILD_ID=${GUILD_ID}
+      - SUBWAVE_URL=${SUBWAVE_URL}
+      - SUBWAVE_STREAM_URL=${SUBWAVE_STREAM_URL}
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASS=${ADMIN_PASS}
+    # Mount local logs/state if needed, or simply run stateless
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

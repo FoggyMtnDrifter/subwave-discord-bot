@@ -1,0 +1,29 @@
+{
+  "name": "subwave-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for SUB/WAVE AI radio — streams audio, accepts song requests, and surfaces live station stats.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy-commands": "node src/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/rest": "^2.4.3",
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.17.3",
+    "ffmpeg-static": "^5.2.0",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.5.0",
+    "sodium-native": "^5.1.0",
+    "@snazzah/davey": "^0.1.12"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
