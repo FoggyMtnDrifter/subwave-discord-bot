@@ -95,7 +95,7 @@ This project includes a **GitHub Actions Workflow** that automatically builds an
    version: '3.8'
    services:
      bot:
-       image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest
+       image: ghcr.io/foggymtndrifter/subwave-discord-bot:latest
        container_name: subwave-discord-bot
        restart: unless-stopped
        env_file: .env
