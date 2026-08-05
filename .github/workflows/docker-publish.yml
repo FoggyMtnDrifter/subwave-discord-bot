@@ -4,28 +4,14 @@ name: Build and publish Docker image
 # Container Registry (GHCR) at ghcr.io/<owner>/<repo>.
 #
 # No secrets to configure: the built-in GITHUB_TOKEN authenticates to GHCR.
-#
-# First-publish note: a brand-new GHCR package can only be *created* by a run on
-# the default branch (a tag ref cannot create it — see actions/runner#1039). So
-# the very first successful run must come from a push to `main`; that seeds and
-# auto-links the package, after which tag runs (and everything else) publish on
-# their own. The concurrency guard below keeps a near-simultaneous branch+tag
-# push from racing to create the package.
-#
-# After the first successful run, make the package public in the repo's Packages
-# settings so users can `docker pull` it without logging in.
+# After the first successful run, make the package public in your repo's
+# Packages settings so users can `docker pull` it without logging in.
 
 on:
   push:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
-
-# Serialize runs so a branch push and a tag push can't both try to create the
-# package at once; queue instead of cancel so no publish is dropped.
-concurrency:
-  group: ghcr-publish
-  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
