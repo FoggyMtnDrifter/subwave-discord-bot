@@ -1,0 +1,23 @@
+# Rebuilt inside the image
+node_modules/
+
+# VCS / CI
+.git/
+.gitignore
+.github/
+
+# Secrets & local config (never bake into an image)
+.env
+.env.*
+!.env.example
+.claude/
+
+# Docker + docs aren't needed in the runtime image
+Dockerfile
+.dockerignore
+docker-compose*.yml
+*.md
+
+# Cruft
+*.log
+.DS_Store

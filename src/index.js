@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { commands } from './commands/index.js';
 import { startPresenceLoop, stopPresenceLoop } from './presence.js';
 import { stopAll } from './voice.js';
+import { registerCommands } from './register.js';
 
 // GuildVoiceStates is required to join/track voice channels. No message-content
 // intent is needed — everything is driven by slash commands.
@@ -15,9 +16,19 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
-client.once(Events.ClientReady, (c) => {
+client.once(Events.ClientReady, async (c) => {
   console.log(`✔ Logged in as ${c.user.tag}`);
   console.log(`  Station: ${config.subwave.baseUrl}`);
+
+  if (config.autoDeployCommands) {
+    try {
+      const { scope, count } = await registerCommands();
+      console.log(`✔ Auto-registered ${count} command(s) to ${scope}.`);
+    } catch (err) {
+      console.warn(`[deploy] auto command registration failed: ${err.message}`);
+    }
+  }
+
   startPresenceLoop(c);
 });
 

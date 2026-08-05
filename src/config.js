@@ -39,4 +39,7 @@ export const config = Object.freeze({
   },
   presenceIntervalMs: Number(optional('PRESENCE_INTERVAL_MS', '15000')),
   requestPollTimeoutMs: Number(optional('REQUEST_POLL_TIMEOUT_MS', '25000')),
+  // Register slash commands automatically on startup (used by the Docker
+  // deployment so there's no separate `npm run deploy` step).
+  autoDeployCommands: /^(1|true|yes)$/i.test(optional('AUTO_DEPLOY_COMMANDS', '')),
 });

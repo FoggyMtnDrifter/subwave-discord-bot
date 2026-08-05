@@ -46,7 +46,67 @@ public HTTP API.
   [Developer Portal](https://discord.com/developers/applications).
 - A running **SUB/WAVE** station with a reachable public origin.
 
-## Setup
+## Configure the Discord application
+
+In the [Developer Portal](https://discord.com/developers/applications) for your
+app — needed for both deployment methods below:
+
+- **Installation** → under *Installation Contexts*, enable both **Guild
+  Install** and **User Install**. This is what makes the bot usable by
+  individual users (in DMs / any server) as well as installed to servers.
+- **Bot** → no privileged intents are required. The bot uses only the default
+  **Guilds** and **Guild Voice States** gateway intents.
+- Grant the bot the **Connect** and **Speak** permissions in any server where it
+  should play audio.
+
+## Deploy with Docker (recommended for SUB/WAVE operators)
+
+If you already run SUB/WAVE with Docker Compose, this is the easy path: a
+prebuilt image is published to GHCR, and a small compose overlay slots the bot
+into your existing stack.
+
+1. **Create the Discord app** and note its token + application ID (see
+   [Configure the Discord application](#configure-the-discord-application)
+   below). Under **Installation**, enable both **Guild Install** and **User
+   Install**.
+
+2. **Add your Discord credentials** to your existing SUB/WAVE `.env` (the same
+   file with `SITE_URL`, `NAVIDROME_URL`, …):
+
+   ```dotenv
+   DISCORD_TOKEN=your-bot-token
+   DISCORD_CLIENT_ID=your-application-id
+   # STATION_NAME=My Station          # optional
+   ```
+
+   The bot reuses your `SITE_URL` automatically as the station origin — no other
+   config needed.
+
+3. **Drop [`docker-compose.discord.yml`](docker-compose.discord.yml)** into your
+   SUB/WAVE directory (next to `docker-compose.yml`) and add it to your usual up
+   command with a second `-f`:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.discord.yml up -d
+   ```
+
+That's it. The container registers its slash commands on first boot
+(`AUTO_DEPLOY_COMMANDS=true`), starts tracking now-playing, and is ready for
+`/play` in a voice channel. To update later, `docker compose ... pull` then `up
+-d` again.
+
+> **Image:** `ghcr.io/foggymtndrifter/subwave-discord-bot:latest`. The overlay
+> reads `DISCORD_BOT_IMAGE` if you'd rather pin a version (e.g.
+> `:1.0.0`). The image is built and published automatically by
+> [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)
+> on every push to `main` and every `v*` tag.
+>
+> **Reaching the station:** the bot talks to your station over its public
+> `SITE_URL`, so that origin must be reachable from inside the container. If your
+> host can't hairpin its own public domain, set `SUBWAVE_BASE_URL` in `.env` to
+> an address the container can reach instead.
+
+## Run locally (Node)
 
 1. **Install dependencies**
 
@@ -72,20 +132,10 @@ public HTTP API.
    - *(optional)* `DISCORD_DEV_GUILD_ID` — a test server ID for instant command
      registration while developing.
 
-3. **Configure the Discord application**
+   Make sure your app is configured per
+   [Configure the Discord application](#configure-the-discord-application) above.
 
-   In the Developer Portal for your app:
-
-   - **Installation** → under *Installation Contexts*, enable both **Guild
-     Install** and **User Install**. This is what makes the bot usable by
-     individual users (in DMs / any server) as well as installed to servers.
-   - **Bot** → enable the **Server Members Intent**? Not required. This bot only
-     needs the default **Guilds** and **Guild Voice States** gateway intents,
-     both of which are on by default. No privileged intents are used.
-   - Grant the bot the **Connect** and **Speak** permissions in any server where
-     it should play audio.
-
-4. **Register the slash commands**
+3. **Register the slash commands**
 
    ```bash
    npm run deploy
@@ -93,8 +143,9 @@ public HTTP API.
 
    With `DISCORD_DEV_GUILD_ID` set, commands appear instantly in that server.
    Without it they register globally (can take up to ~1 hour the first time).
+   (Alternatively set `AUTO_DEPLOY_COMMANDS=true` to register on startup.)
 
-5. **Run the bot**
+4. **Run the bot**
 
    ```bash
    npm start
@@ -124,6 +175,7 @@ public HTTP API.
 | `STATION_NAME`           |          | `SUB/WAVE`     | Display name in embeds/presence |
 | `PRESENCE_INTERVAL_MS`   |          | `15000`        | Now-playing / presence poll interval |
 | `REQUEST_POLL_TIMEOUT_MS`|          | `25000`        | How long to poll a request for its outcome |
+| `AUTO_DEPLOY_COMMANDS`   |          | `false`        | Register slash commands on startup (the Docker image sets this) |
 
 ## Notes & limits
 

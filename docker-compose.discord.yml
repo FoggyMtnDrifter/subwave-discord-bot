@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════
+#  SUB/WAVE Discord bot — compose overlay
+# ═══════════════════════════════════════════════════════════════
+#
+# Drop this file into your SUB/WAVE directory (next to docker-compose.yml) and
+# add it to your normal up command with a second -f:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.discord.yml up -d
+#
+# It reuses SITE_URL from your existing SUB/WAVE .env, so the only new values
+# you add to that same .env are your Discord credentials:
+#
+#   DISCORD_TOKEN=...        # Developer Portal → your app → Bot → Reset Token
+#   DISCORD_CLIENT_ID=...    # Developer Portal → your app → Application ID
+#   # STATION_NAME=SUB/WAVE          # optional display name
+#   # SUBWAVE_BASE_URL=https://...   # optional; defaults to SITE_URL
+#   # DISCORD_BOT_IMAGE=ghcr.io/foggymtndrifter/subwave-discord-bot:1.0.0  # optional version pin
+#
+# Slash commands register themselves on first boot (AUTO_DEPLOY_COMMANDS).
+# In the Discord Developer Portal, enable BOTH "Guild Install" and "User
+# Install" under Installation, and give the bot Connect + Speak permissions in
+# any server where it should play audio.
+
+services:
+  subwave-discord:
+    # Published to GHCR by the repo's build workflow. Pin a version by setting
+    # DISCORD_BOT_IMAGE in your .env (see the header).
+    image: ${DISCORD_BOT_IMAGE:-ghcr.io/foggymtndrifter/subwave-discord-bot:latest}
+    container_name: subwave-discord
+    restart: unless-stopped
+    # tini as PID 1 → clean signal handling and reaping of the ffmpeg children.
+    init: true
+    environment:
+      # Point the bot at your station's public origin. Defaults to SUB/WAVE's
+      # own SITE_URL; set SUBWAVE_BASE_URL in .env only to override.
+      SUBWAVE_BASE_URL: ${SUBWAVE_BASE_URL:-${SITE_URL}}
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      STATION_NAME: ${STATION_NAME:-SUB/WAVE}
+      # Register slash commands on startup so there's no separate deploy step.
+      AUTO_DEPLOY_COMMANDS: "true"
