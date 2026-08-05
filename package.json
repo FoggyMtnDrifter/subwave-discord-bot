@@ -1,0 +1,31 @@
+{
+  "name": "subwave-discord-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot that broadcasts a single SUB/WAVE radio station: live voice playback, now-playing rich presence, and listener requests via slash commands.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "radio",
+    "icecast",
+    "subwave",
+    "music"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.0",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.0.0",
+    "libsodium-wrappers": "^0.8.0"
+  }
+}
