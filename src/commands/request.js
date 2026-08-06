@@ -8,6 +8,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { submitRequest, waitForRequest } from '../subwave.js';
 import { baseEmbed, noticeEmbed, COLORS } from '../embeds.js';
@@ -37,7 +38,7 @@ export async function execute(interaction) {
     .setStyle(TextInputStyle.Paragraph)
     .setPlaceholder('e.g. play some Bowie · something slower · more like this')
     .setRequired(true)
-    .setMaxLength(300);
+    .setMaxLength(280); // matches the station's REQUEST_TEXT_MAX
 
   const modal = new ModalBuilder()
     .setCustomId(MODAL_ID)
@@ -47,29 +48,49 @@ export async function execute(interaction) {
   await interaction.showModal(modal);
 }
 
-// Handles the submitted form: submit → poll → report.
+// "45s" for short waits, "12 minutes" for the hourly-cap case.
+function humanizeSeconds(s) {
+  if (!s || s <= 0) return '';
+  if (s < 90) return `${s}s`;
+  const m = Math.round(s / 60);
+  return `${m} minute${m === 1 ? '' : 's'}`;
+}
+
+// Turn a submitRequest() failure into a friendly, appropriately-toned embed.
+function submitErrorEmbed(err) {
+  if (err.status === 429) {
+    // The bot is a single listener, so SUB/WAVE's per-listener limits are shared
+    // across everyone using it — say so, so an unexpected wait makes sense.
+    const wait = humanizeSeconds(err.retryAfter);
+    return noticeEmbed(
+      'Request',
+      `🕐 The request line is busy right now${wait ? ` — try again in about ${wait}` : ' — try again shortly'}.\n` +
+        '_Requests are shared across everyone using the bot._',
+      COLORS.pending,
+    ).setTitle('One moment');
+  }
+  if (err.status === 503) {
+    // SUB/WAVE's own copy is already friendly ("temporarily closed" / "on
+    // autopilot — requests reopen when someone's tuned in").
+    return noticeEmbed('Request', err.message || 'Requests are closed right now.', COLORS.offline)
+      .setTitle('Requests closed');
+  }
+  return noticeEmbed('Request', `Couldn't submit that request: ${err.message}`, COLORS.error);
+}
+
+// Handles the submitted form: submit → poll → report. Replies are ephemeral so
+// only the requester sees them.
 export async function handleModal(interaction) {
   const text = interaction.fields.getTextInputValue('text').trim();
   const name = interaction.user.displayName || interaction.user.username;
 
-  await interaction.deferReply();
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   let receipt;
   try {
     receipt = await submitRequest({ text, name });
   } catch (err) {
-    const paused = err.status === 429;
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          'Request',
-          paused
-            ? "The booth isn't taking requests right now (rate-limited, or nobody's listening). Try again in a bit."
-            : `Couldn't submit that request: ${err.message}`,
-          COLORS.error,
-        ),
-      ],
-    });
+    await interaction.editReply({ embeds: [submitErrorEmbed(err)] });
     return;
   }
 

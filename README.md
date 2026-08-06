@@ -197,10 +197,16 @@ That's it. The container registers its slash commands on first boot
   the station's current track — shared by every server, exactly like the
   broadcast itself.
 - Voice playback requires the bot to be a **member of the server**; a pure
-  user-install (no bot in the server) can still use `/nowplaying`, `/request`,
-  and `/tunein`, but not `/play`.
-- Requests are **rate-limited per client by the station** and paused when nobody
-  is listening; the bot surfaces that back to the requester.
+  user-install (no bot in the server) can still use `/request` and `/tunein`,
+  but not `/play`.
+- **Requests can be turned off.** At startup the bot checks whether the station
+  accepts requests, and if not, `/request` isn't registered at all. (Flip it back
+  on and re-run `npm run deploy` / restart to bring the command back.)
+- **Request limits are shared.** SUB/WAVE rate-limits requests per listener, and
+  the bot is a single listener — so its per-listener cooldown and hourly cap are
+  shared across everyone using it. When a limit is hit (or requests are paused
+  because nobody's tuned in), the requester gets a friendly "try again in …"
+  message rather than a raw error.
 
 ## License
 

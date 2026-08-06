@@ -23,8 +23,11 @@ client.once(Events.ClientReady, async (c) => {
 
   if (config.autoDeployCommands) {
     try {
-      const { scope, count } = await registerCommands();
+      const { scope, count, requestsEnabled } = await registerCommands();
       console.log(`✔ Auto-registered ${count} command(s) to ${scope}.`);
+      if (!requestsEnabled) {
+        console.log('  ℹ /request omitted — the station has requests disabled.');
+      }
     } catch (err) {
       console.warn(`[deploy] auto command registration failed: ${err.message}`);
     }

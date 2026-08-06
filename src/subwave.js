@@ -74,14 +74,50 @@ export async function submitRequest({ text, name }) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.success === false) {
-      // The controller returns 429 when rate-limited or requests are paused.
-      const reason =
-        data.message || data.error || `HTTP ${res.status}`;
-      const err = new Error(reason);
+      // 429 → rate-limited (per-IP cooldown / hourly cap / station-wide cap),
+      // 503 → requests disabled or paused for zero listeners. Both carry a
+      // friendly `message`; 429 also carries `retryAfter` seconds.
+      const err = new Error(data.message || data.error || `HTTP ${res.status}`);
       err.status = res.status;
+      err.retryAfter = typeof data.retryAfter === 'number' ? data.retryAfter : null;
       throw err;
     }
     return data; // { success, requestId, status }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Are listener requests enabled on the station right now?
+ *
+ * There's no public settings read, so we probe: an empty-text POST /request is
+ * rejected *before* the rate-limit gate (no side effects, no quota burned).
+ * A 503 whose message says requests are closed means the operator's kill switch
+ * (or requests.enabled=false) is on. Anything else — 400 (empty), 429
+ * (rate-limited), or the zero-listener "autopilot" 503 — means the feature is
+ * live. We fail open (return true) if the station is unreachable.
+ */
+export async function requestsEnabled() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${apiUrl}/request`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ text: '' }),
+      signal: controller.signal,
+    });
+    if (res.status === 503) {
+      const data = await res.json().catch(() => ({}));
+      // "Requests are temporarily closed." → disabled. The zero-listener pause
+      // ("…on autopilot — requests reopen when someone's tuned in.") is not.
+      if (/closed/i.test(data.message || '')) return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[subwave] requestsEnabled probe failed (assuming enabled): ${err.message}`);
+    return true;
   } finally {
     clearTimeout(timer);
   }

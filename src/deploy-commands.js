@@ -11,13 +11,16 @@
 import { registerCommands } from './register.js';
 
 registerCommands()
-  .then(({ scope, count }) => {
+  .then(({ scope, count, requestsEnabled }) => {
     console.log(
       `✔ Registered ${count} command(s) to ${scope}.` +
         (scope === 'global'
           ? ' Global commands can take up to an hour to appear the first time.'
           : ''),
     );
+    if (!requestsEnabled) {
+      console.log('  ℹ /request omitted — the station has requests disabled.');
+    }
   })
   .catch((err) => {
     console.error('✖ Failed to register commands:', err);
