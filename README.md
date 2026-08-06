@@ -15,27 +15,33 @@ public HTTP API.
 - **📻 Live playback** — `/play` joins your voice channel and broadcasts the
   station's Icecast stream. It stays connected 24/7 and auto-reconnects through
   network hiccups.
-- **🎧 Now-playing rich presence** — the bot's profile shows
-  *Listening to `Artist — Title`*, refreshed automatically from the station.
-- **🙋 Requests** — `/request something slower` sends a free-text request to the
-  booth; the DJ picks a track, and the bot reports back with the match and its
-  queue position.
+- **🎧 Now-playing everywhere** — the bot's profile shows *Listening to `Artist
+  — Title`* (refreshed automatically), and while it's broadcasting it also posts
+  a now-playing card in the channel `/play` was run from on every song change,
+  and sets the voice channel's status line to *🎵 Artist — Title*.
+- **🙋 Requests** — `/request` opens a form; the request goes to the booth, the
+  DJ picks a track, and the bot reports back with the match and its queue
+  position.
 - **🔗 Tune-in links** — `/tunein` hands out direct stream / `.pls` / `.m3u`
   links for VLC, Sonos, browsers, and hardware radios.
+- **👋 Leaves empty channels** — the bot disconnects automatically ~30s after
+  the last person leaves the voice channel.
 - **Slash commands, user- *and* guild-installable** — the informational
   commands work as a user-install (in DMs and any server) as well as a classic
   guild install; voice playback is guild-only (a bot must be a server member to
-  join voice).
+  join voice). Every reply uses a consistent embed style.
 
 ## Commands
 
-| Command        | Where it works                     | What it does |
-| -------------- | ---------------------------------- | ------------ |
-| `/nowplaying`  | anywhere (user + guild install)    | Current track, artist, album art, DJ, listener count |
-| `/request <text>` | anywhere (user + guild install) | Ask the DJ to play something |
-| `/tunein`      | anywhere (user + guild install)    | Direct listen links (ephemeral) |
-| `/play`        | in a server                        | Broadcast the station in your voice channel |
-| `/stop`        | in a server                        | Leave the voice channel |
+| Command    | Where it works                     | What it does |
+| ---------- | ---------------------------------- | ------------ |
+| `/request` | anywhere (user + guild install)    | Open a form to ask the DJ to play something |
+| `/tunein`  | anywhere (user + guild install)    | Direct listen links (ephemeral) |
+| `/play`    | in a server                        | Broadcast the station in your voice channel; posts now-playing cards there on each song change |
+| `/stop`    | in a server                        | Leave the voice channel |
+
+The current track is shown by the bot's **rich presence** and the **voice
+channel status**, so there's no `/nowplaying` command.
 
 ## Prerequisites
 
@@ -156,12 +162,20 @@ That's it. The container registers its slash commands on first boot
 - **Station API** (`src/subwave.js`) wraps the SUB/WAVE HTTP API under
   `SUBWAVE_BASE_URL/api`: `GET /now-playing`, `POST /request` + `GET /request/:id`,
   and the `/cover/:id` art proxy. Everything is unauthenticated.
+- **Station watcher** (`src/station.js`) is the single poller of `/now-playing`.
+  It emits `update` every poll (drives presence) and `trackChange` only when the
+  track actually changes (drives the channel announcements and voice-channel
+  status). One broadcast, one source of truth.
 - **Voice** (`src/voice.js`) discovers the Icecast mount from `/now-playing`
   (or `SUBWAVE_STREAM_URL`), then runs `ffmpeg` to pull the stream and emit raw
   48 kHz stereo PCM into a per-guild `AudioPlayer`. If ffmpeg or the player
-  drops, it respawns automatically — right for a never-ending radio feed.
-- **Presence** (`src/presence.js`) polls `/now-playing` on an interval and sets
-  the bot's global activity to *Listening to `Artist — Title`*.
+  drops, it respawns automatically — right for a never-ending radio feed. Each
+  session remembers the channel `/play` was run in (for song-change cards), sets
+  the voice channel's status, and leaves when the channel empties.
+- **Presence** (`src/presence.js`) subscribes to the watcher and sets the bot's
+  global activity to *Listening to `Artist — Title`*.
+- **Embeds** (`src/embeds.js`) is the one place embed styling lives, so every
+  command and announcement shares the same look.
 
 ## Configuration reference
 

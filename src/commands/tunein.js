@@ -4,10 +4,10 @@ import {
   SlashCommandBuilder,
   InteractionContextType,
   ApplicationIntegrationType,
-  EmbedBuilder,
   MessageFlags,
 } from 'discord.js';
 import { resolveStreamUrl } from '../subwave.js';
+import { baseEmbed, COLORS } from '../embeds.js';
 import { config } from '../config.js';
 
 export const data = new SlashCommandBuilder()
@@ -25,12 +25,11 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const { baseUrl, stationName } = config.subwave;
+  const { baseUrl } = config.subwave;
   const streamUrl = await resolveStreamUrl();
 
-  const embed = new EmbedBuilder()
-    .setColor(0x1db954)
-    .setTitle(`📻 Tune in to ${stationName}`)
+  const embed = baseEmbed('Tune In', COLORS.live)
+    .setTitle('📻 Listen to the station')
     .setDescription(
       [
         `**Direct stream:** ${streamUrl}`,

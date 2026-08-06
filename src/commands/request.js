@@ -1,25 +1,23 @@
-// /request — submit a free-text song request to the station's booth. The DJ
-// interprets it, picks a track, and queues it. We submit, then poll for the
-// outcome and report back with the matched track and queue position.
+// /request — opens a form (modal) for a free-text song request, submits it to
+// the station's booth, then polls for the outcome and reports the matched track.
 import {
   SlashCommandBuilder,
   InteractionContextType,
   ApplicationIntegrationType,
-  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
 } from 'discord.js';
 import { submitRequest, waitForRequest } from '../subwave.js';
+import { baseEmbed, noticeEmbed, COLORS } from '../embeds.js';
 import { config } from '../config.js';
+
+export const MODAL_ID = 'subwave:request';
 
 export const data = new SlashCommandBuilder()
   .setName('request')
-  .setDescription('Ask the DJ to play something (e.g. "play some Bowie", "something slower")')
-  .addStringOption((opt) =>
-    opt
-      .setName('text')
-      .setDescription('What would you like to hear?')
-      .setRequired(true)
-      .setMaxLength(300),
-  )
+  .setDescription('Ask the DJ to play something')
   .setContexts(
     InteractionContextType.Guild,
     InteractionContextType.BotDM,
@@ -30,9 +28,28 @@ export const data = new SlashCommandBuilder()
     ApplicationIntegrationType.UserInstall,
   );
 
+// The slash command just opens the form. A modal must be the first response to
+// the interaction, so there's no defer here.
 export async function execute(interaction) {
-  const text = interaction.options.getString('text', true);
-  // Use the requester's display name so the DJ can shout them out.
+  const input = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('What would you like to hear?')
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder('e.g. play some Bowie · something slower · more like this')
+    .setRequired(true)
+    .setMaxLength(300);
+
+  const modal = new ModalBuilder()
+    .setCustomId(MODAL_ID)
+    .setTitle('Request a track')
+    .addComponents(new ActionRowBuilder().addComponents(input));
+
+  await interaction.showModal(modal);
+}
+
+// Handles the submitted form: submit → poll → report.
+export async function handleModal(interaction) {
+  const text = interaction.fields.getTextInputValue('text').trim();
   const name = interaction.user.displayName || interaction.user.username;
 
   await interaction.deferReply();
@@ -44,34 +61,31 @@ export async function execute(interaction) {
     const paused = err.status === 429;
     await interaction.editReply({
       embeds: [
-        new EmbedBuilder()
-          .setColor(0x9b1c1c)
-          .setTitle('Request not accepted')
-          .setDescription(
-            paused
-              ? "The booth isn't taking requests right now (rate-limited, or nobody's listening). Try again in a bit."
-              : `Couldn't submit that request: ${err.message}`,
-          ),
+        noticeEmbed(
+          'Request',
+          paused
+            ? "The booth isn't taking requests right now (rate-limited, or nobody's listening). Try again in a bit."
+            : `Couldn't submit that request: ${err.message}`,
+          COLORS.error,
+        ),
       ],
     });
     return;
   }
 
-  // Let the requester know it's in, then poll for the resolution.
-  const pending = new EmbedBuilder()
-    .setColor(0xf1c40f)
-    .setTitle('🎧 Request received')
-    .setDescription(`Taking *"${text}"* to the booth…`);
-  await interaction.editReply({ embeds: [pending] });
+  await interaction.editReply({
+    embeds: [
+      noticeEmbed('Request', `🎧 Taking *"${text}"* to the booth…`, COLORS.pending),
+    ],
+  });
 
   const outcome = await waitForRequest(receipt.requestId, {
     timeoutMs: config.requestPollTimeoutMs,
   });
 
-  const embed = new EmbedBuilder();
+  let embed;
   if (outcome.status === 'resolved' && outcome.track) {
-    embed
-      .setColor(0x1db954)
+    embed = baseEmbed('Request', COLORS.live)
       .setTitle('✅ Coming up')
       .setDescription(outcome.ack || 'Your request is queued.')
       .addFields({
@@ -81,33 +95,23 @@ export async function execute(interaction) {
         }`,
       });
     if (typeof outcome.queuePosition === 'number' && outcome.queuePosition > 0) {
-      embed.addFields({
-        name: 'Queue position',
-        value: `#${outcome.queuePosition}`,
-        inline: true,
-      });
+      embed.addFields({ name: 'Queue position', value: `#${outcome.queuePosition}`, inline: true });
     }
   } else if (outcome.status === 'resolved') {
-    // Resolved as a conversational reply (nothing queued).
-    embed
-      .setColor(0x1db954)
-      .setTitle('💬 From the booth')
-      .setDescription(outcome.ack || 'Heard you loud and clear.');
+    embed = noticeEmbed('Request', outcome.ack || 'Heard you loud and clear.', COLORS.live)
+      .setTitle('💬 From the booth');
   } else if (outcome.status === 'rejected' || outcome.status === 'failed') {
-    embed
-      .setColor(0x9b1c1c)
-      .setTitle("Couldn't find that")
-      .setDescription(
-        outcome.ack || outcome.message || "The booth couldn't find a match for that one.",
-      );
+    embed = noticeEmbed(
+      'Request',
+      outcome.ack || outcome.message || "The booth couldn't find a match for that one.",
+      COLORS.error,
+    ).setTitle("Couldn't find that");
   } else {
-    // Still pending at timeout — it may yet land; don't claim failure.
-    embed
-      .setColor(0xf1c40f)
-      .setTitle('🎧 Request in the booth')
-      .setDescription(
-        `*"${text}"* is still being worked out — listen in, it may be on its way.`,
-      );
+    embed = noticeEmbed(
+      'Request',
+      `*"${text}"* is still being worked out — listen in, it may be on its way.`,
+      COLORS.pending,
+    ).setTitle('🎧 Still in the booth');
   }
 
   await interaction.editReply({ embeds: [embed] });

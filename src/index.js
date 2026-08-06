@@ -1,17 +1,18 @@
 // SUB/WAVE Discord bot — entry point.
 //
-// Wires up the gateway client, dispatches slash-command interactions, keeps the
-// bot's rich presence in sync with the station, and cleans up voice sessions on
-// shutdown.
+// Wires up the gateway client, dispatches slash-command and modal interactions,
+// runs the station watcher (which drives presence + per-session announcements),
+// leaves empty voice channels, and cleans up on shutdown.
 import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { config } from './config.js';
-import { commands } from './commands/index.js';
-import { startPresenceLoop, stopPresenceLoop } from './presence.js';
-import { stopAll } from './voice.js';
+import { commands, modalHandlers } from './commands/index.js';
+import { startPresenceLoop } from './presence.js';
+import { station, startStation, stopStation } from './station.js';
+import { announceTrackChange, handleVoiceStateUpdate, stopAll } from './voice.js';
 import { registerCommands } from './register.js';
 
-// GuildVoiceStates is required to join/track voice channels. No message-content
-// intent is needed — everything is driven by slash commands.
+// GuildVoiceStates is required to join voice and to detect an empty channel.
+// No message-content intent is needed — everything is slash commands + modals.
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
@@ -29,41 +30,48 @@ client.once(Events.ClientReady, async (c) => {
     }
   }
 
-  startPresenceLoop(c);
+  // Subscribe consumers before the watcher starts emitting.
+  startPresenceLoop(c); // listens for 'update'
+  station.on('trackChange', (np) => announceTrackChange(np));
+  startStation();
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  const command = commands.get(interaction.commandName);
-  if (!command) return;
-
   try {
-    await command.execute(interaction);
+    if (interaction.isChatInputCommand()) {
+      const command = commands.get(interaction.commandName);
+      if (command) await command.execute(interaction);
+    } else if (interaction.isModalSubmit()) {
+      const handler = modalHandlers.get(interaction.customId);
+      if (handler) await handler(interaction);
+    }
   } catch (err) {
-    console.error(`[interaction] ${interaction.commandName} failed:`, err);
+    console.error(`[interaction] ${interaction.commandName ?? interaction.customId} failed:`, err);
     const payload = {
-      content: '⚠️ Something went wrong handling that command.',
+      content: '⚠️ Something went wrong handling that.',
       flags: MessageFlags.Ephemeral,
     };
     try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp(payload);
-      } else {
-        await interaction.reply(payload);
-      }
+      if (interaction.deferred || interaction.replied) await interaction.followUp(payload);
+      else if (interaction.isRepliable()) await interaction.reply(payload);
     } catch {
       // Interaction token likely expired — nothing more we can do.
     }
   }
 });
 
-// Graceful shutdown: drop voice sessions and the presence loop, then log out.
+// Leave voice channels once the last human departs.
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+  handleVoiceStateUpdate(oldState, newState);
+});
+
+// Graceful shutdown: stop the watcher, drop voice sessions, log out.
 let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`\n${signal} received — shutting down.`);
-  stopPresenceLoop();
+  stopStation();
   stopAll();
   try {
     await client.destroy();

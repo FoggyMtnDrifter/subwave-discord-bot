@@ -10,8 +10,9 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { startPlayback } from '../voice.js';
+import { getCurrent } from '../station.js';
 import { getNowPlaying } from '../subwave.js';
-import { nowPlayingEmbed } from './embed.js';
+import { trackEmbed, noticeEmbed, COLORS } from '../embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('play')
@@ -19,54 +20,42 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild)
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall);
 
+// Reply to a validation failure with a consistent ephemeral embed.
+function reject(interaction, message) {
+  return interaction.reply({
+    embeds: [noticeEmbed('Play', message, COLORS.error)],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 export async function execute(interaction) {
-  const member = interaction.member;
-  const channel = member?.voice?.channel;
+  const channel = interaction.member?.voice?.channel;
 
   if (!channel) {
-    await interaction.reply({
-      content: '🔇 Join a voice channel first, then run `/play`.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+    return reject(interaction, '🔇 Join a voice channel first, then run `/play`.');
   }
-
   if (
     channel.type !== ChannelType.GuildVoice &&
     channel.type !== ChannelType.GuildStageVoice
   ) {
-    await interaction.reply({
-      content: "I can't broadcast in that kind of channel.",
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+    return reject(interaction, "I can't broadcast in that kind of channel.");
   }
 
-  // Make sure we can actually join and speak.
   const perms = channel.permissionsFor(interaction.client.user);
   if (!perms?.has(PermissionFlagsBits.Connect) || !perms?.has(PermissionFlagsBits.Speak)) {
-    await interaction.reply({
-      content: `I need **Connect** and **Speak** permissions in ${channel}.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+    return reject(interaction, `I need **Connect** and **Speak** permissions in ${channel}.`);
   }
 
   await interaction.deferReply();
 
   try {
-    const { resumed } = await startPlayback(channel);
-    const np = await getNowPlaying();
-    const embed = nowPlayingEmbed(np).setAuthor({
-      name: resumed
-        ? `📻 Already broadcasting in ${channel.name}`
-        : `📻 Broadcasting in ${channel.name}`,
-    });
-    await interaction.editReply({ embeds: [embed] });
+    await startPlayback(channel, interaction.channelId);
+    const np = getCurrent() ?? (await getNowPlaying());
+    await interaction.editReply({ embeds: [trackEmbed(np)] });
   } catch (err) {
     console.error(`[play] ${err.message}`);
     await interaction.editReply({
-      content: `⚠️ Couldn't start the broadcast: ${err.message}`,
+      embeds: [noticeEmbed('Play', `⚠️ Couldn't start the broadcast: ${err.message}`, COLORS.error)],
     });
   }
 }

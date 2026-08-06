@@ -1,10 +1,11 @@
-// Per-guild voice playback of the SUB/WAVE Icecast stream.
+// Per-guild voice playback of the SUB/WAVE Icecast stream, plus the session's
+// live surface: now-playing announcements in the channel /play was run from,
+// the voice channel's status line, and auto-leave when the channel empties.
 //
-// A radio stream is a single, never-ending source, so the model here is simple:
-// one AudioPlayer per guild, fed by an ffmpeg process that pulls the Icecast
-// mount and emits raw 48kHz stereo PCM. If ffmpeg dies or the player falls idle
-// (an Icecast hiccup, a mid-song reconnect), we transparently respawn — the
-// listener just hears the stream resume.
+// A radio stream is a single, never-ending source, so playback is simple: one
+// AudioPlayer per guild fed by an ffmpeg process that pulls the Icecast mount
+// and emits raw 48kHz stereo PCM. If ffmpeg dies or the player falls idle we
+// transparently respawn — the listener just hears the stream resume.
 import { spawn } from 'node:child_process';
 import {
   joinVoiceChannel,
@@ -16,13 +17,20 @@ import {
   entersState,
   getVoiceConnection,
 } from '@discordjs/voice';
+import { Routes, PermissionFlagsBits } from 'discord.js';
 import { resolveStreamUrl } from './subwave.js';
+import { getCurrent } from './station.js';
+import { trackEmbed } from './embeds.js';
+import { config } from './config.js';
 
-// guildId → { connection, player, ffmpeg, streamUrl, stopping }
+// Leave a voice channel this long after the last human leaves.
+const EMPTY_GRACE_MS = 30_000;
+
+// guildId → session bag
 const sessions = new Map();
 
-// Spawn ffmpeg to transcode the live stream into Discord-ready raw PCM.
-// The reconnect flags keep a 24/7 radio feed alive across brief network drops.
+// ── ffmpeg / audio ───────────────────────────────────────────
+
 function spawnFfmpeg(streamUrl) {
   return spawn(
     'ffmpeg',
@@ -42,11 +50,9 @@ function spawnFfmpeg(streamUrl) {
   );
 }
 
-// Build (or rebuild) the audio resource for a session and hand it to the player.
 function feed(session) {
   if (session.stopping) return;
 
-  // Tear down any previous ffmpeg before starting a fresh one.
   if (session.ffmpeg) {
     session.ffmpeg.removeAllListeners();
     session.ffmpeg.kill('SIGKILL');
@@ -63,49 +69,127 @@ function feed(session) {
     console.error(`[voice:${session.guildId}] ffmpeg spawn error: ${err.message}`);
   });
   ffmpeg.on('close', (code) => {
-    // A non-deliberate exit means the stream dropped — respawn shortly unless
-    // we're tearing the session down.
     if (!session.stopping) {
-      console.warn(
-        `[voice:${session.guildId}] ffmpeg exited (${code}); restarting stream in 2s`,
-      );
+      console.warn(`[voice:${session.guildId}] ffmpeg exited (${code}); restarting in 2s`);
       session.restartTimer = setTimeout(() => feed(session), 2000);
     }
   });
 
-  const resource = createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.Raw,
-  });
+  const resource = createAudioResource(ffmpeg.stdout, { inputType: StreamType.Raw });
   session.player.play(resource);
 }
 
+// ── voice channel status ("🎵 Artist — Title" under the channel) ─
+
+function statusText(np) {
+  const t = np?.nowPlaying;
+  if (np?.streamOnline === false || !t?.title) return `🎵 ${config.subwave.stationName}`;
+  return t.artist ? `🎵 ${t.artist} — ${t.title}` : `🎵 ${t.title}`;
+}
+
+async function setVoiceStatus(session, np) {
+  const status = statusText(np);
+  if (status === session.lastStatus) return;
+
+  // Skip quietly if we lack the permission, rather than erroring every poll.
+  const channel = session.client.channels.cache.get(session.voiceChannelId);
+  const perms = channel?.permissionsFor(session.client.user);
+  if (perms && !perms.has(PermissionFlagsBits.SetVoiceChannelStatus)) return;
+
+  session.lastStatus = status;
+  try {
+    await session.client.rest.put(Routes.channelVoiceStatus(session.voiceChannelId), {
+      body: { status },
+    });
+  } catch (err) {
+    console.warn(`[voice:${session.guildId}] set voice status failed: ${err.message}`);
+  }
+}
+
+function clearVoiceStatus(session) {
+  session.client.rest
+    .put(Routes.channelVoiceStatus(session.voiceChannelId), { body: { status: '' } })
+    .catch(() => {});
+}
+
+// ── track-change fan-out (called by the station watcher) ─────
+
 /**
- * Join the given voice channel and start broadcasting the station there.
- * @param channel a GuildVoiceChannel the invoking member is in.
- * @returns { streamUrl }
+ * On every track change, refresh each active session's voice-channel status and
+ * post a now-playing card to the channel that session's /play was run from.
  */
-export async function startPlayback(channel) {
-  const guildId = channel.guild.id;
+export async function announceTrackChange(np) {
+  for (const session of sessions.values()) {
+    setVoiceStatus(session, np).catch(() => {});
+
+    // Only announce real tracks — no "off air"/"nothing" spam.
+    if (!np?.nowPlaying?.title || !session.textChannelId) continue;
+    try {
+      const channel = await session.client.channels.fetch(session.textChannelId);
+      if (channel?.isTextBased()) {
+        await channel.send({ embeds: [trackEmbed(np, { context: 'Now Playing' })] });
+      }
+    } catch (err) {
+      console.warn(`[voice:${session.guildId}] announce failed: ${err.message}`);
+    }
+  }
+}
+
+// ── empty-channel auto-leave ─────────────────────────────────
+
+function humansIn(channel) {
+  return channel ? channel.members.filter((m) => !m.user.bot).size : 0;
+}
+
+/** Wired to the client's voiceStateUpdate: leave once the channel is empty. */
+export function handleVoiceStateUpdate(oldState, newState) {
+  const guild = (newState ?? oldState).guild;
+  const session = sessions.get(guild.id);
+  if (!session) return;
+
+  const vc = guild.channels.cache.get(session.voiceChannelId);
+  if (!vc) return; // channel not in cache — don't treat as empty (kick/delete is handled by the Disconnected watcher)
+  if (humansIn(vc) === 0) {
+    if (!session.emptyTimer) {
+      session.emptyTimer = setTimeout(() => {
+        console.log(`[voice:${guild.id}] voice channel empty — leaving`);
+        stopPlayback(guild.id);
+      }, EMPTY_GRACE_MS);
+      session.emptyTimer.unref?.();
+    }
+  } else if (session.emptyTimer) {
+    clearTimeout(session.emptyTimer);
+    session.emptyTimer = null;
+  }
+}
+
+// ── lifecycle ────────────────────────────────────────────────
+
+/**
+ * Join `voiceChannel` and broadcast the station there. `textChannelId` is the
+ * channel /play was invoked in — where song-change cards get posted.
+ * @returns { streamUrl, resumed }
+ */
+export async function startPlayback(voiceChannel, textChannelId) {
+  const guildId = voiceChannel.guild.id;
   const streamUrl = await resolveStreamUrl();
 
-  // Already live in this guild → just make sure we're in the right channel.
   const existing = sessions.get(guildId);
   if (existing) {
     existing.streamUrl = streamUrl;
-    if (existing.connection.joinConfig.channelId !== channel.id) {
-      existing.connection.rejoin({
-        channelId: channel.id,
-        selfDeaf: true,
-        selfMute: false,
-      });
+    existing.textChannelId = textChannelId;
+    if (existing.connection.joinConfig.channelId !== voiceChannel.id) {
+      existing.voiceChannelId = voiceChannel.id;
+      existing.connection.rejoin({ channelId: voiceChannel.id, selfDeaf: true, selfMute: false });
     }
+    setVoiceStatus(existing, getCurrent()).catch(() => {});
     return { streamUrl, resumed: true };
   }
 
   const connection = joinVoiceChannel({
-    channelId: channel.id,
+    channelId: voiceChannel.id,
     guildId,
-    adapterCreator: channel.guild.voiceAdapterCreator,
+    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
     selfDeaf: true,
     selfMute: false,
   });
@@ -113,10 +197,22 @@ export async function startPlayback(channel) {
   const player = createAudioPlayer();
   connection.subscribe(player);
 
-  const session = { guildId, connection, player, ffmpeg: null, streamUrl, stopping: false };
+  const session = {
+    guildId,
+    client: voiceChannel.client,
+    connection,
+    player,
+    ffmpeg: null,
+    streamUrl,
+    stopping: false,
+    voiceChannelId: voiceChannel.id,
+    textChannelId,
+    restartTimer: null,
+    emptyTimer: null,
+    lastStatus: null,
+  };
   sessions.set(guildId, session);
 
-  // If the player ever reports Idle (source ended / stalled), re-feed it.
   player.on(AudioPlayerStatus.Idle, () => {
     if (!session.stopping) {
       console.warn(`[voice:${guildId}] player idle; re-feeding stream`);
@@ -128,14 +224,12 @@ export async function startPlayback(channel) {
     if (!session.stopping) feed(session);
   });
 
-  // Handle being moved/disconnected: try to recover, otherwise clean up.
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try {
       await Promise.race([
         entersState(connection, VoiceConnectionStatus.Signalling, 5000),
         entersState(connection, VoiceConnectionStatus.Connecting, 5000),
       ]);
-      // Reconnecting — let it ride.
     } catch {
       stopPlayback(guildId);
     }
@@ -149,6 +243,7 @@ export async function startPlayback(channel) {
   }
 
   feed(session);
+  setVoiceStatus(session, getCurrent()).catch(() => {});
   return { streamUrl, resumed: false };
 }
 
@@ -156,13 +251,14 @@ export async function startPlayback(channel) {
 export function stopPlayback(guildId) {
   const session = sessions.get(guildId);
   if (!session) {
-    // Nothing tracked, but make sure no stray connection lingers.
     const stray = getVoiceConnection(guildId);
     if (stray) stray.destroy();
     return false;
   }
   session.stopping = true;
   clearTimeout(session.restartTimer);
+  clearTimeout(session.emptyTimer);
+  clearVoiceStatus(session);
   try {
     session.player.stop(true);
   } catch {}

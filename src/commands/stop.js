@@ -6,6 +6,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { stopPlayback, isPlaying } from '../voice.js';
+import { noticeEmbed, COLORS } from '../embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('stop')
@@ -16,11 +17,13 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   if (!isPlaying(interaction.guildId)) {
     await interaction.reply({
-      content: "I'm not broadcasting here right now.",
+      embeds: [noticeEmbed('Stop', "I'm not broadcasting here right now.", COLORS.info)],
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
   stopPlayback(interaction.guildId);
-  await interaction.reply({ content: '👋 Stopped the broadcast and left the channel.' });
+  await interaction.reply({
+    embeds: [noticeEmbed('Stop', '👋 Stopped the broadcast and left the channel.', COLORS.info)],
+  });
 }
