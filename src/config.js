@@ -37,7 +37,12 @@ export const config = Object.freeze({
     streamUrl: optional('SUBWAVE_STREAM_URL', null),
     stationName: optional('STATION_NAME', 'SUB/WAVE'),
   },
-  presenceIntervalMs: Number(optional('PRESENCE_INTERVAL_MS', '15000')),
+  // How often the station watcher polls now-playing (drives channel
+  // announcements + voice-channel status). Also accepts the legacy
+  // PRESENCE_INTERVAL_MS name for back-compat.
+  stationPollIntervalMs: Number(
+    optional('STATION_POLL_INTERVAL_MS', optional('PRESENCE_INTERVAL_MS', '15000')),
+  ),
   requestPollTimeoutMs: Number(optional('REQUEST_POLL_TIMEOUT_MS', '25000')),
   // Register slash commands automatically on startup (used by the Docker
   // deployment so there's no separate `npm run deploy` step).

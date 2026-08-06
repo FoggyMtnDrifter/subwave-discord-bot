@@ -1,11 +1,9 @@
 // The station watcher — one poller, one source of truth for "what's on air".
 //
 // SUB/WAVE is a single global broadcast, so a single timer polls now-playing and
-// fans the result out via events:
-//   'update'      (np) — every poll; drives the always-on rich presence
-//   'trackChange' (np) — only when the track actually changes; drives the
-//                        per-session channel announcements and voice-status
-// This replaces having each consumer poll independently.
+// emits 'trackChange' (np) only when the track actually changes — which drives
+// the per-session channel announcements and voice-channel status. getCurrent()
+// exposes the latest payload for one-off reads (e.g. the /play confirmation).
 import { EventEmitter } from 'node:events';
 import { getNowPlaying } from './subwave.js';
 import { config } from './config.js';
@@ -32,7 +30,6 @@ export function getCurrent() {
 async function tick() {
   const np = await getNowPlaying().catch(() => null);
   current = np;
-  station.emit('update', np);
   const key = trackKey(np);
   if (key !== lastKey) {
     lastKey = key;
@@ -40,10 +37,10 @@ async function tick() {
   }
 }
 
-/** Begin polling. Runs immediately, then every PRESENCE_INTERVAL_MS. */
+/** Begin polling. Runs immediately, then every STATION_POLL_INTERVAL_MS. */
 export function startStation() {
   tick();
-  timer = setInterval(tick, config.presenceIntervalMs);
+  timer = setInterval(tick, config.stationPollIntervalMs);
   timer.unref?.();
 }
 

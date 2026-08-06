@@ -15,10 +15,9 @@ public HTTP API.
 - **📻 Live playback** — `/play` joins your voice channel and broadcasts the
   station's Icecast stream. It stays connected 24/7 and auto-reconnects through
   network hiccups.
-- **🎧 Now-playing everywhere** — the bot's profile shows *Listening to `Artist
-  — Title`* (refreshed automatically), and while it's broadcasting it also posts
-  a now-playing card in the channel `/play` was run from on every song change,
-  and sets the voice channel's status line to *🎵 Artist — Title*.
+- **🎧 Now-playing while broadcasting** — on every song change the bot posts a
+  now-playing card in the channel `/play` was run from, and sets the voice
+  channel's status line to *🎵 Artist — Title*.
 - **🙋 Requests** — `/request` opens a form; the request goes to the booth, the
   DJ picks a track, and the bot reports back with the match and its queue
   position.
@@ -163,17 +162,14 @@ That's it. The container registers its slash commands on first boot
   `SUBWAVE_BASE_URL/api`: `GET /now-playing`, `POST /request` + `GET /request/:id`,
   and the `/cover/:id` art proxy. Everything is unauthenticated.
 - **Station watcher** (`src/station.js`) is the single poller of `/now-playing`.
-  It emits `update` every poll (drives presence) and `trackChange` only when the
-  track actually changes (drives the channel announcements and voice-channel
-  status). One broadcast, one source of truth.
+  It emits `trackChange` only when the track actually changes (drives the channel
+  announcements and voice-channel status). One broadcast, one source of truth.
 - **Voice** (`src/voice.js`) discovers the Icecast mount from `/now-playing`
   (or `SUBWAVE_STREAM_URL`), then runs `ffmpeg` to pull the stream and emit raw
   48 kHz stereo PCM into a per-guild `AudioPlayer`. If ffmpeg or the player
   drops, it respawns automatically — right for a never-ending radio feed. Each
   session remembers the channel `/play` was run in (for song-change cards), sets
   the voice channel's status, and leaves when the channel empties.
-- **Presence** (`src/presence.js`) subscribes to the watcher and sets the bot's
-  global activity to *Listening to `Artist — Title`*.
 - **Embeds** (`src/embeds.js`) is the one place embed styling lives, so every
   command and announcement shares the same look.
 
@@ -186,16 +182,13 @@ That's it. The container registers its slash commands on first boot
 | `SUBWAVE_BASE_URL`       | ✅       | —              | Station origin, no trailing slash |
 | `DISCORD_DEV_GUILD_ID`   |          | —              | Register commands to one guild instantly |
 | `SUBWAVE_STREAM_URL`     |          | auto-discovered| Override the Icecast mount |
-| `STATION_NAME`           |          | `SUB/WAVE`     | Display name in embeds/presence |
-| `PRESENCE_INTERVAL_MS`   |          | `15000`        | Now-playing / presence poll interval |
+| `STATION_NAME`           |          | `SUB/WAVE`     | Station display name |
+| `STATION_POLL_INTERVAL_MS`|         | `15000`        | Now-playing poll interval (song-change cards + voice status) |
 | `REQUEST_POLL_TIMEOUT_MS`|          | `25000`        | How long to poll a request for its outcome |
 | `AUTO_DEPLOY_COMMANDS`   |          | `false`        | Register slash commands on startup (the Docker image sets this) |
 
 ## Notes & limits
 
-- A Discord bot has a **single global presence**, so the "now playing" status is
-  the station's current track — shared by every server, exactly like the
-  broadcast itself.
 - Voice playback requires the bot to be a **member of the server**; a pure
   user-install (no bot in the server) can still use `/request` and `/tunein`,
   but not `/play`.

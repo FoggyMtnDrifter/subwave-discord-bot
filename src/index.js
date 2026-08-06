@@ -1,12 +1,11 @@
 // SUB/WAVE Discord bot — entry point.
 //
 // Wires up the gateway client, dispatches slash-command and modal interactions,
-// runs the station watcher (which drives presence + per-session announcements),
-// leaves empty voice channels, and cleans up on shutdown.
+// runs the station watcher (which drives per-session announcements + voice
+// status), leaves empty voice channels, and cleans up on shutdown.
 import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { config } from './config.js';
 import { commands, modalHandlers } from './commands/index.js';
-import { startPresenceLoop } from './presence.js';
 import { station, startStation, stopStation } from './station.js';
 import { announceTrackChange, handleVoiceStateUpdate, stopAll } from './voice.js';
 import { registerCommands } from './register.js';
@@ -33,8 +32,8 @@ client.once(Events.ClientReady, async (c) => {
     }
   }
 
-  // Subscribe consumers before the watcher starts emitting.
-  startPresenceLoop(c); // listens for 'update'
+  // Announce track changes to active voice sessions. Subscribe before the
+  // watcher starts emitting.
   station.on('trackChange', (np) => announceTrackChange(np));
   startStation();
 });
