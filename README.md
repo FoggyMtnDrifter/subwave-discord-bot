@@ -201,7 +201,8 @@ That's it. The container registers its slash commands on first boot
 - **Likes are shared too.** SUB/WAVE likes the currently-airing track and dedups
   per listener, so the bot forwards at most one like per track — but the button's
   count is the local tally of distinct Discord users who liked it (in-memory, so
-  it resets on restart).
+  it resets on restart). If the station has likes **disabled**, the button isn't
+  shown at all (checked at startup, like requests).
 - **Request limits are shared.** SUB/WAVE rate-limits requests per listener, and
   the bot is a single listener — so its per-listener cooldown and hourly cap are
   shared across everyone using it. When a limit is hit (or requests are paused

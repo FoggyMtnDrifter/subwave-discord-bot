@@ -124,6 +124,20 @@ export async function requestsEnabled() {
 }
 
 /**
+ * Are likes enabled on the station? The public GET /like reports `enabled`.
+ * Fail open (true) if unreachable — a stray like just no-ops server-side.
+ */
+export async function likesEnabled() {
+  try {
+    const data = await getJson('/like');
+    return data?.enabled !== false;
+  } catch (err) {
+    console.warn(`[subwave] likesEnabled check failed (assuming enabled): ${err.message}`);
+    return true;
+  }
+}
+
+/**
  * Like the currently-airing track. SUB/WAVE only accepts a like for the track
  * on air right now and dedups per listener IP — the bot is a single listener,
  * so at most one like per airing lands however many people tap the button.

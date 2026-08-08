@@ -8,7 +8,8 @@ import { config } from './config.js';
 import { commands, modalHandlers } from './commands/index.js';
 import { station, startStation, stopStation } from './station.js';
 import { announceTrackChange, handleVoiceStateUpdate, stopAll } from './voice.js';
-import { LIKE_PREFIX, handleLikeButton } from './likes.js';
+import { LIKE_PREFIX, handleLikeButton, setLikesEnabled } from './likes.js';
+import { likesEnabled } from './subwave.js';
 import { registerCommands } from './register.js';
 
 // GuildVoiceStates is required to join voice and to detect an empty channel.
@@ -32,6 +33,11 @@ client.once(Events.ClientReady, async (c) => {
       console.warn(`[deploy] auto command registration failed: ${err.message}`);
     }
   }
+
+  // Hide the like button if the station has likes turned off.
+  const likes = await likesEnabled();
+  setLikesEnabled(likes);
+  if (!likes) console.log('  ℹ Like button hidden — the station has likes disabled.');
 
   // Announce track changes to active voice sessions. Subscribe before the
   // watcher starts emitting.

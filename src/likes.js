@@ -13,6 +13,13 @@ export const LIKE_PREFIX = 'subwave:like:';
 const likesByTrack = new Map(); // trackId → Set<userId>
 const sentToStation = new Set(); // trackIds we've already liked on the station
 
+// Whether the station has likes enabled (checked once at startup). When off, no
+// like button is rendered — mirrors how /request is hidden when requests are off.
+let stationLikesEnabled = true;
+export function setLikesEnabled(enabled) {
+  stationLikesEnabled = enabled !== false;
+}
+
 export function likeCount(trackId) {
   return likesByTrack.get(trackId)?.size ?? 0;
 }
@@ -44,6 +51,7 @@ function buildRow(trackId, count) {
  * or none when the item isn't likeable (a jingle/segment with no subsonic id).
  */
 export function likeComponents(np) {
+  if (!stationLikesEnabled) return [];
   const id = np?.nowPlaying?.subsonic_id;
   return id ? [buildRow(id, likeCount(id))] : [];
 }
