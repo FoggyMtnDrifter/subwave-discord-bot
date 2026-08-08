@@ -123,6 +123,33 @@ export async function requestsEnabled() {
   }
 }
 
+/**
+ * Like the currently-airing track. SUB/WAVE only accepts a like for the track
+ * on air right now and dedups per listener IP — the bot is a single listener,
+ * so at most one like per airing lands however many people tap the button.
+ * Passing `songId` lets the station reject a like for a track that just ended.
+ * @returns true only if the station actually recorded the like.
+ */
+export async function likeTrack(songId) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${apiUrl}/like`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ songId }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    return res.ok && data.liked === true;
+  } catch (err) {
+    console.warn(`[subwave] like failed: ${err.message}`);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Poll a single request outcome. Returns the raw ledger entry. */
 export async function getRequest(id) {
   return getJson(`/request/${encodeURIComponent(id)}`);

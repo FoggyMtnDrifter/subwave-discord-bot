@@ -21,6 +21,7 @@ import { Routes, PermissionFlagsBits } from 'discord.js';
 import { resolveStreamUrl } from './subwave.js';
 import { getCurrent } from './station.js';
 import { trackEmbed } from './embeds.js';
+import { likeComponents } from './likes.js';
 import { config } from './config.js';
 
 // Leave a voice channel this long after the last human leaves.
@@ -127,7 +128,10 @@ export async function announceTrackChange(np) {
     try {
       const channel = await session.client.channels.fetch(session.textChannelId);
       if (channel?.isTextBased()) {
-        await channel.send({ embeds: [trackEmbed(np, { context: 'Now Playing' })] });
+        await channel.send({
+          embeds: [trackEmbed(np, { context: 'Now Playing' })],
+          components: likeComponents(np),
+        });
       }
     } catch (err) {
       console.warn(`[voice:${session.guildId}] announce failed: ${err.message}`);

@@ -13,6 +13,7 @@ import { startPlayback } from '../voice.js';
 import { getCurrent } from '../station.js';
 import { getNowPlaying } from '../subwave.js';
 import { trackEmbed, noticeEmbed, COLORS } from '../embeds.js';
+import { likeComponents } from '../likes.js';
 
 export const data = new SlashCommandBuilder()
   .setName('play')
@@ -51,7 +52,7 @@ export async function execute(interaction) {
   try {
     await startPlayback(channel, interaction.channelId);
     const np = getCurrent() ?? (await getNowPlaying());
-    await interaction.editReply({ embeds: [trackEmbed(np)] });
+    await interaction.editReply({ embeds: [trackEmbed(np)], components: likeComponents(np) });
   } catch (err) {
     console.error(`[play] ${err.message}`);
     await interaction.editReply({

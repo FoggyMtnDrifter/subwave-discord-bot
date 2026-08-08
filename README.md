@@ -18,6 +18,9 @@ public HTTP API.
 - **🎧 Now-playing while broadcasting** — on every song change the bot posts a
   now-playing card in the channel `/play` was run from, and sets the voice
   channel's status line to *🎵 Artist — Title*.
+- **❤️ Like button** — each now-playing card carries a like button showing how
+  many people here liked the track; the first like also forwards one like to the
+  station.
 - **🙋 Requests** — `/request` opens a form; the request goes to the booth, the
   DJ picks a track, and the bot reports back with the match and its queue
   position.
@@ -195,6 +198,10 @@ That's it. The container registers its slash commands on first boot
 - **Requests can be turned off.** At startup the bot checks whether the station
   accepts requests, and if not, `/request` isn't registered at all. (Flip it back
   on and re-run `npm run deploy` / restart to bring the command back.)
+- **Likes are shared too.** SUB/WAVE likes the currently-airing track and dedups
+  per listener, so the bot forwards at most one like per track — but the button's
+  count is the local tally of distinct Discord users who liked it (in-memory, so
+  it resets on restart).
 - **Request limits are shared.** SUB/WAVE rate-limits requests per listener, and
   the bot is a single listener — so its per-listener cooldown and hourly cap are
   shared across everyone using it. When a limit is hit (or requests are paused

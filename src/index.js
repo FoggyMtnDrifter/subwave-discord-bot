@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { commands, modalHandlers } from './commands/index.js';
 import { station, startStation, stopStation } from './station.js';
 import { announceTrackChange, handleVoiceStateUpdate, stopAll } from './voice.js';
+import { LIKE_PREFIX, handleLikeButton } from './likes.js';
 import { registerCommands } from './register.js';
 
 // GuildVoiceStates is required to join voice and to detect an empty channel.
@@ -46,6 +47,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } else if (interaction.isModalSubmit()) {
       const handler = modalHandlers.get(interaction.customId);
       if (handler) await handler(interaction);
+    } else if (interaction.isButton()) {
+      if (interaction.customId.startsWith(LIKE_PREFIX)) await handleLikeButton(interaction);
     }
   } catch (err) {
     console.error(`[interaction] ${interaction.commandName ?? interaction.customId} failed:`, err);
